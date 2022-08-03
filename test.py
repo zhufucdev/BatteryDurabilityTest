@@ -24,6 +24,7 @@ class StandardTest(Test):
             WaitUntilCPUFree(),
             Pause(1),
             excel_context,
+            Pause(1),
             TimerLoop(
                 [
                     ExcelCalc(excel_context),
@@ -32,13 +33,14 @@ class StandardTest(Test):
                 ],
                 MS_WORK_DURATION
             ),
-            Pause(1),
+            Pause(0.5),
             HitEscapeKey(),
 
             LaunchPPT(),
             WaitUntilCPUFree(),
             Pause(1),
             ppt_context,
+            Pause(1),
             TimerLoop(
                 [
                     PPTNext(ppt_context),
@@ -46,13 +48,14 @@ class StandardTest(Test):
                 ],
                 MS_WORK_DURATION
             ),
-            Pause(1),
+            Pause(0.5),
             HitEscapeKey(),
 
             LaunchWord(),
             WaitUntilCPUFree(),
             Pause(1),
             MSOpenRecentDoc(),
+            Pause(1),
             TimerLoop([WordTypeNonsense()], MS_WORK_DURATION)
         ]
         super().__init__("standard_test", actions)

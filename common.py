@@ -1,7 +1,9 @@
 from typing import Sequence, Optional, Iterable, Callable
 import logging
 import sys
+import math
 import pyautogui
+import pyperclip
 import psutil
 import threading
 import time
@@ -49,8 +51,8 @@ class Test:
 
                 logging.debug(f"[{self}] Action: {action}")
                 action.execute()
-            except pyautogui.FailSafeException:
-                logging.debug("Test cancelled.")
+            except pyautogui.FailSafeException as e:
+                logging.debug(f"Test cancelled. Cause: {e}")
                 sys.exit(1)
             except Exception as e:
                 logging.warning(f"Error while carrying out {self}: {e}")
@@ -143,13 +145,15 @@ class Batch(AutomaticallyPausedAction):
 
 
 class WaitUntilCPUFree(Action):
-    def __init__(self):
+    def __init__(self, strict: Optional[bool] = False):
         super().__init__("wait_for_free")
-        self.threshold = 25
+        self.threshold = 10 * math.log(psutil.cpu_count(True))
+        if strict:
+            self.threshold *= 0.8
         self.timeout = 10
 
-        if self.threshold < 10:
-            self.threshold = 10
+        if self.threshold < 8:
+            self.threshold = 8
 
     def execute(self):
         count = 0
@@ -179,7 +183,9 @@ class HitSearchKey(AutomaticallyPausedAction):
 
     def execute(self):
         if IS_WINDOWS:
-            pyautogui.press("win")
+            pyautogui.keyDown("win")
+            pyautogui.press("s")
+            pyautogui.keyUp("win")
         else:
             pyautogui.keyDown("command")
             pyautogui.press("space")
@@ -239,22 +245,39 @@ class LaunchQQ(OpenApp):
         super().__init__("qq")
 
 
-class LaunchExcel(OpenApp):
-    def __init__(self):
+class MSLaunch(OpenApp):
+    def __init__(self, app_name: str):
+        self.ms_name = app_name
         if IS_WINDOWS:
-            super().__init__("excel", 0)
+            super().__init__(app_name, 0)
         else:
-            super().__init__("microsoft excel", 0)
+            super().__init__(f"microsoft {app_name}", 0)
+
+    def execute(self):
+        super().execute()
+        if IS_WINDOWS:
+            # sometimes Windows has task schedule problem
+            WaitUntilCPUFree(strict=True).execute()
+            time.sleep(0.5)
+            win = pyautogui.getWindowsWithTitle(self.ms_name.capitalize())
+            if len(win) < 1:
+                raise pyautogui.FailSafeException(f"Failed to activate {self.ms_name.capitalize()}.")
+            win[0].activate()
 
 
-class LaunchWord(OpenApp):
+class LaunchExcel(MSLaunch):
     def __init__(self):
-        super().__init__("microsoft word", 0)
+        super().__init__("excel")
 
 
-class LaunchPPT(OpenApp):
+class LaunchWord(MSLaunch):
     def __init__(self):
-        super().__init__("microsoft powerpoint", 0)
+        super().__init__("word")
+
+
+class LaunchPPT(MSLaunch):
+    def __init__(self):
+        super().__init__("powerpoint")
 
 
 class MoveCursorRelateToWindow(AutomaticallyPausedAction):
@@ -409,7 +432,15 @@ class ExcelCalc(Action):
 
     def execute(self):
         cells = ",".join([col + str(self.pre.current_row) for col in ['I', 'O', 'U', 'AA', 'AM', 'AS', 'AY', 'BE']])
-        pyautogui.write(f"=SUM({cells})")
+        expr = f"=SUM({cells})"
+        if IS_WINDOWS:
+            pyautogui.write(expr)
+            time.sleep(0.2)
+        else:
+            pyperclip.copy(expr)
+            pyautogui.keyDown("command")
+            pyautogui.press("v")
+            pyautogui.keyUp("command")
 
 
 class PPTPlay(Action):
@@ -452,7 +483,7 @@ class PPTNext(Action):
 
     def execute(self):
         time.sleep(5)
-        if self.context.current_slide >= 3:  # Sample PPT's actual click count
+        if self.context.current_slide >= 65:  # Sample PPT's actual click count
             pyautogui.press("esc")
             self.context.current_slide = 1
             PPTPlay().execute()
@@ -465,7 +496,7 @@ class WordTypeNonsense(Action):
         super().__init__("word_typewrite")
 
     def execute(self):
-        pyautogui.write("Microsoft Word the best IDE on this plannet!")
+        pyautogui.write("Microsoft Word the best IDE on this planet! ", 0.08)
         time.sleep(0.5)
         pyautogui.write(time.strftime("%Y-%m-%d %H:%M:%S"))
         pyautogui.press("enter")
