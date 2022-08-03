@@ -1,11 +1,10 @@
-from typing import List, Optional
+from typing import Sequence, Optional, Iterable, Callable
 import logging
 import sys
 import pyautogui
+import psutil
 import threading
 import time
-
-logging.basicConfig(format='%(asctime)s %(message)s', datefmt='%c')
 
 IS_WINDOWS = sys.platform == "win32"
 
@@ -25,21 +24,36 @@ class Action:
         return self.name
 
 
+class AutomaticallyPausedAction(Action):
+    """ To distinguish between actions that need pause before executed in action chain and that don't."""
+
+    def __init__(self, name):
+        super().__init__(name)
+
+
 class Test:
     """ Symbolize a test project.
     Use predefined classes preferably.
     """
 
-    def __init__(self, name: str, actions: List[Action]):
+    def __init__(self, name: str, actions: Iterable[Action]):
         self.name = name
         self.actions = actions
 
     def carry(self):
+        logging.debug(f"------{self}------")
         for action in self.actions:
             try:
+                if action is not AutomaticallyPausedAction:
+                    Pause(pyautogui.PAUSE).execute()
+
+                logging.debug(f"[{self}] Action: {action}")
                 action.execute()
+            except pyautogui.FailSafeException:
+                logging.debug("Test cancelled.")
+                sys.exit(1)
             except Exception as e:
-                logging.warning(f"Error while executing action {action} in {self}: {e}")
+                logging.warning(f"Error while carrying out {self}: {e}")
 
     def __str__(self):
         return self.name
@@ -54,7 +68,112 @@ class Pause(Action):
         time.sleep(self.amount)
 
 
-class HitSearchKey(Action):
+# Flow Control
+class Loop(AutomaticallyPausedAction):
+    """ Symbolize a loop, where actions are executed repeatedly in order."""
+
+    def __init__(self, actions: Iterable[Action]):
+        super().__init__("loop")
+        self.actions = actions
+
+    def execute(self):
+        while True:
+            for action in self.actions:
+                action.execute()
+
+
+class TimerLoop(Loop):
+    """ Symbolize a loop that exits after a certain period of time."""
+
+    def __init__(self, actions: Iterable[Action], timeout: float):
+        super().__init__(actions)
+        self.timeout = timeout
+        self.cancelled = False
+
+    def execute(self):
+        time_start = time.time()
+
+        def take(a: Action, timeout: float):
+            def execute():
+                try:
+                    a.execute()
+                except pyautogui.FailSafeException:
+                    self.cancelled = True
+
+            if a is not AutomaticallyPausedAction:
+                time.sleep(pyautogui.PAUSE)
+
+            t = threading.Thread(target=execute)
+            t.start()
+            logging.debug(f"\t[.loop] Action: {a}")
+            t.join(timeout)
+            if self.cancelled:
+                raise pyautogui.FailSafeException()
+
+            if t.is_alive():
+                return False
+            return True
+
+        while True:
+            for action in self.actions:
+                if not take(action, self.timeout - time.time() + time_start):
+                    return
+
+    def __str__(self):
+        return f"loop(timeout={self.timeout})"
+
+
+class Batch(AutomaticallyPausedAction):
+    """ Symbolize a batch of actions."""
+
+    def __init__(self, name: str, actions: Sequence[Action]):
+        super().__init__(name)
+        self.actions = actions
+
+    def execute(self):
+        for action in self.actions:
+            if action is not AutomaticallyPausedAction:
+                time.sleep(pyautogui.PAUSE)
+
+            logging.debug(f"\t[.batch] Action: {action}")
+            action.execute()
+
+    def __str__(self):
+        return f"{self.name}(stack_size={len(self.actions)})"
+
+
+class WaitUntilCPUFree(Action):
+    def __init__(self):
+        super().__init__("wait_for_free")
+        self.threshold = 25
+        self.timeout = 10
+
+        if self.threshold < 10:
+            self.threshold = 10
+
+    def execute(self):
+        count = 0
+        while psutil.cpu_percent() > self.threshold:
+            time.sleep(0.5)
+            count += 1
+            if count > self.timeout * 2:
+                raise TimeoutError(f"CPU usage always high at {psutil.cpu_percent()}%")
+
+    def __str__(self):
+        return f"{self.name}(threshold={self.threshold}%)"
+
+
+class Call(Action):
+    def __init__(self, name: str, function: Callable):
+        super().__init__(name)
+        self.function = function
+
+    def execute(self):
+        self.function()
+
+
+# Common Keys
+class HitSearchKey(AutomaticallyPausedAction):
     def __init__(self):
         super().__init__("hit_search_key")
 
@@ -67,28 +186,41 @@ class HitSearchKey(Action):
             pyautogui.keyUp("command")
 
 
-class HitSpaceKey(Action):
-    def __init__(self):
-        super().__init__("play")
+class HitKey(AutomaticallyPausedAction):
+    def __init__(self, key_code: str):
+        super().__init__(f"hit_{key_code}")
+        self.key_code = key_code
 
     def execute(self):
-        pyautogui.press("space")
+        pyautogui.press(self.key_code)
 
 
-class OpenApp(Action):
-    def __init__(self, app_name: str):
+class HitSpaceKey(HitKey):
+    def __init__(self):
+        super().__init__("space")
+
+
+class HitEnterKey(HitKey):
+    def __init__(self):
+        super().__init__("enter")
+
+
+class OpenApp(AutomaticallyPausedAction):
+    def __init__(self, app_name: str, interval: Optional[int] = 0.1):
         super().__init__("open_app")
         self.app_name = app_name
+        self.interval = interval
 
     def execute(self):
         HitSearchKey().execute()
-        pyautogui.write(self.app_name, 0.1)
+        pyautogui.write(self.app_name, self.interval)
         pyautogui.press("enter")
 
     def __str__(self):
         return f"open_app({self.app_name})"
 
 
+# App Launcher
 class LaunchNeteaseMusic(OpenApp):
     def __init__(self):
         if IS_WINDOWS:
@@ -97,41 +229,30 @@ class LaunchNeteaseMusic(OpenApp):
             super().__init__("neteasemusic")
 
 
-class ClickScreenContent(Action):
-    def __init__(self, sample_name: str, sample_count: Optional[int]):
-        super().__init__("click_screen_content")
-        self.sample_name = sample_name
-        self.successful = False
-        if sample_count:
-            self.sample_count = sample_count
+class LaunchQQ(OpenApp):
+    def __init__(self):
+        super().__init__("qq")
+
+
+class LaunchExcel(OpenApp):
+    def __init__(self):
+        if IS_WINDOWS:
+            super().__init__("excel", 0)
         else:
-            self.sample_count = 1
-
-    def execute(self):
-        def click_sample(file):
-            btn_location = pyautogui.locateOnScreen(file)
-            if btn_location is not None:
-                x, y = pyautogui.center(btn_location)
-                pyautogui.click(x, y)
-                self.successful = True
-
-        if self.sample_count == 1:
-            click_sample(f'./samples/{self.sample_name}.png')
-        else:
-            threads = []
-            for i in range(1, self.sample_count + 1):
-                t = threading.Thread(target=click_sample, args=[f'./samples/{self.sample_name}.{i}.png'])
-                threads.append(t)
-                t.start()
-
-            for thread in threads:
-                thread.join()
-
-        if not self.successful:
-            raise IndexError("Target button is missing.")
+            super().__init__("microsoft excel", 0)
 
 
-class MoveCursorRelateToWindow(Action):
+class LaunchWord(OpenApp):
+    def __init__(self):
+        super().__init__("microsoft word", 0)
+
+
+class LaunchPPT(OpenApp):
+    def __init__(self):
+        super().__init__("microsoft powerpoint", 0)
+
+
+class MoveCursorRelateToWindow(AutomaticallyPausedAction):
     def __init__(self, x: float, y: float, origin: str):
         self.x = x
         self.y = y
@@ -158,7 +279,8 @@ class MoveCursorRelateToWindow(Action):
         pyautogui.moveTo(x, y)
 
 
-class Click(Action):
+# Utility
+class Click(AutomaticallyPausedAction):
     def __init__(self):
         super().__init__("click")
 
@@ -166,20 +288,120 @@ class Click(Action):
         pyautogui.click()
 
 
-class TestInitialization(Test):
+class ClickPos(AutomaticallyPausedAction):
+    def __init__(self, pos):
+        super().__init__("click_pos")
+        self.pos = pos
+
+    def execute(self):
+        pyautogui.click(self.pos)
+
+
+class ClickScreenContent(AutomaticallyPausedAction):
+    def __init__(self, sample_name: str, sample_count: Optional[int] = 1):
+        super().__init__("click_screen_content")
+        self.sample_name = sample_name
+        self.successful = False
+        if sample_count:
+            self.sample_count = sample_count
+        else:
+            self.sample_count = 1
+
+    def execute(self):
+        def click_sample(file):
+            pyautogui.click(file)
+
+        if self.sample_count == 1:
+            click_sample(f'./samples/{self.sample_name}.png')
+        else:
+            threads = []
+            for i in range(1, self.sample_count + 1):
+                t = threading.Thread(target=click_sample, args=[f'./samples/{self.sample_name}.{i}.png'])
+                threads.append(t)
+                t.start()
+
+            for thread in threads:
+                thread.join()
+
+        if not self.successful:
+            raise IndexError("Target button is missing.")
+
+
+# Specific Problems
+class QQLogin(Batch):
     def __init__(self):
         actions = [
-            LaunchNeteaseMusic(),
-            Pause(8),
-            HitSpaceKey()
+            LaunchQQ(),
+            WaitUntilCPUFree(),
+            HitEnterKey(),
+            Pause(2),
+            WaitUntilCPUFree(),
         ]
-        super().__init__("initialize_test", actions)
+        super().__init__("qq_login", actions)
 
 
-class StandardTest(Test):
+class MSGoto(Action):
+    def __init__(self, address: str):
+        super().__init__("ms_goto")
+        self.address = address
+
+    def execute(self):
+        pyautogui.keyDown("ctrl")
+        pyautogui.press("g")
+        pyautogui.keyUp("ctrl")
+        if not IS_WINDOWS:
+            time.sleep(0.5)
+            pyautogui.press("tab")
+        pyautogui.write(self.address)
+        pyautogui.press("enter")
+        if not IS_WINDOWS:
+            time.sleep(0.5)
+
+
+class MSOpenRecentDoc(Batch):
+    def __init__(self):
+        if IS_WINDOWS:
+            actions = [
+                HitKey("tab")
+                for _ in range(0, 4)
+            ]
+            actions.append(HitEnterKey())
+        else:
+            actions = [
+                HitKey("tab"),
+                Pause(1),
+                HitEnterKey()
+            ]
+        super().__init__("ms_select_first_doc", actions)
+
+
+class ExcelPrepare(Batch):
     def __init__(self):
         actions = [
-
+            MSOpenRecentDoc(),
+            WaitUntilCPUFree(),
+            Pause(1),
+            MSGoto("BQ3"),
         ]
+        self.current_row = 3
+        super().__init__("excel_prepare", actions)
 
-        super().__init__("standard_test", actions)
+    def next_row(self):
+        def plus():
+            self.current_row += 1
+
+        return Call("bump_row_counter", plus)
+
+    def execute(self):
+        super().execute()
+        self.current_row = 3
+
+
+class ExcelCalc(Action):
+    def __init__(self, pre: ExcelPrepare):
+        super().__init__("excel_calc")
+        self.pre = pre
+
+    def execute(self):
+        cells = ",".join([col + str(self.pre.current_row) for col in ['I', 'O', 'U', 'AA', 'AM', 'AS', 'AY', 'BE']])
+        pyautogui.write(f"=SUM({cells})")
