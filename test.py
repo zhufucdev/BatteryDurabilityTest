@@ -60,6 +60,7 @@ class StandardTest(Test):
             Pause(1),
             TimerLoop([WordTypeNonsense()], MS_WORK_DURATION),
 
+            Pause(1),
             LaunchBrowser()
         ]
         [actions.append(OpenAndBrowse(url, 10)) for url in BROWSE_PAGES]
