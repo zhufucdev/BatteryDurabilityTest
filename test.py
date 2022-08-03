@@ -1,6 +1,8 @@
 from common import *
 
 MS_WORK_DURATION = 30
+BROWSE_PAGES = ["jd.com", "taobao.com", "sina.com.cn", "163.com", "sohu.com", "ithome.com", "chiphell.com",
+                "bbs.nga.cn", "gamersky.com", "3dmgame.com", "4399.com", "https://www.apple.com.cn/macbook-air-m2/"]
 
 
 class TestInitialization(Test):
@@ -22,7 +24,7 @@ class StandardTest(Test):
         actions = [
             LaunchExcel(),
             WaitUntilCPUFree(),
-            Pause(1),
+            Pause(1.3),
             excel_context,
             Pause(1),
             TimerLoop(
@@ -38,7 +40,7 @@ class StandardTest(Test):
 
             LaunchPPT(),
             WaitUntilCPUFree(),
-            Pause(1),
+            Pause(1.3),
             ppt_context,
             Pause(1),
             TimerLoop(
@@ -53,9 +55,12 @@ class StandardTest(Test):
 
             LaunchWord(),
             WaitUntilCPUFree(),
-            Pause(1),
+            Pause(1.3),
             MSOpenRecentDoc(),
             Pause(1),
-            TimerLoop([WordTypeNonsense()], MS_WORK_DURATION)
+            TimerLoop([WordTypeNonsense()], MS_WORK_DURATION),
+
+            LaunchBrowser(),
+            [OpenAndBrowse(url, 10) for url in BROWSE_PAGES]
         ]
         super().__init__("standard_test", actions)

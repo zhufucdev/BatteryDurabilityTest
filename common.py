@@ -147,7 +147,7 @@ class Batch(AutomaticallyPausedAction):
 class WaitUntilCPUFree(Action):
     def __init__(self, strict: Optional[bool] = False):
         super().__init__("wait_for_free")
-        self.threshold = 10 * math.log(psutil.cpu_count(True))
+        self.threshold = 35 - 13 * math.log(psutil.cpu_count(True), math.e * 2)
         if strict:
             self.threshold *= 0.8
         self.timeout = 10
@@ -216,6 +216,20 @@ class HitEscapeKey(HitKey):
         super().__init__("esc")
 
 
+class Paste(AutomaticallyPausedAction):
+    def __init__(self):
+        super().__init__("paste")
+
+    def execute(self):
+        if IS_WINDOWS:
+            dec = "ctrl"
+        else:
+            dec = "command"
+        pyautogui.keyDown(dec)
+        pyautogui.press("v")
+        pyautogui.keyUp(dec)
+
+
 class OpenApp(AutomaticallyPausedAction):
     def __init__(self, app_name: str, interval: Optional[int] = 0.1):
         super().__init__("open_app")
@@ -248,10 +262,7 @@ class LaunchQQ(OpenApp):
 class MSLaunch(OpenApp):
     def __init__(self, app_name: str):
         self.ms_name = app_name
-        if IS_WINDOWS:
-            super().__init__(app_name, 0)
-        else:
-            super().__init__(f"microsoft {app_name}", 0)
+        super().__init__(app_name, 0)
 
     def execute(self):
         super().execute()
@@ -259,9 +270,9 @@ class MSLaunch(OpenApp):
             # sometimes Windows has task schedule problem
             WaitUntilCPUFree(strict=True).execute()
             time.sleep(0.5)
-            win = pyautogui.getWindowsWithTitle(self.ms_name.capitalize())
+            win = pyautogui.getWindowsWithTitle(self.ms_name.title())
             if len(win) < 1:
-                raise pyautogui.FailSafeException(f"Failed to activate {self.ms_name.capitalize()}.")
+                raise pyautogui.FailSafeException(f"Failed to activate {self.ms_name.title()}.")
             win[0].activate()
 
 
@@ -280,6 +291,23 @@ class LaunchPPT(MSLaunch):
         super().__init__("powerpoint")
 
 
+class LaunchBrowser(MSLaunch):
+    def __init__(self):
+        if IS_WINDOWS:
+            super().__init__("microsoft edge")
+        else:
+            super().__init__("safari")
+
+
+class Click(AutomaticallyPausedAction):
+    def __init__(self):
+        super().__init__("click")
+
+    def execute(self):
+        pyautogui.click()
+
+
+# Utility
 class MoveCursorRelateToWindow(AutomaticallyPausedAction):
     def __init__(self, x: float, y: float, origin: str):
         self.x = x
@@ -305,15 +333,6 @@ class MoveCursorRelateToWindow(AutomaticallyPausedAction):
             x = window.right + self.x
 
         pyautogui.moveTo(x, y)
-
-
-# Utility
-class Click(AutomaticallyPausedAction):
-    def __init__(self):
-        super().__init__("click")
-
-    def execute(self):
-        pyautogui.click()
 
 
 class ClickPos(AutomaticallyPausedAction):
@@ -355,6 +374,12 @@ class ClickScreenContent(AutomaticallyPausedAction):
             raise IndexError("Target button is missing.")
 
 
+class ClickCentral(ClickPos):
+    def __init__(self):
+        width, height = pyautogui.size()
+        super().__init__((width / 2, height / 9))
+
+
 # Specific Problems
 class QQLogin(Batch):
     def __init__(self):
@@ -369,7 +394,7 @@ class QQLogin(Batch):
         super().__init__("qq_login", actions)
 
 
-class MSGoto(Action):
+class MSGoto(AutomaticallyPausedAction):
     def __init__(self, address: str):
         super().__init__("ms_goto")
         self.address = address
@@ -425,7 +450,7 @@ class ExcelPrepare(Batch):
         self.current_row = 3
 
 
-class ExcelCalc(Action):
+class ExcelCalc(AutomaticallyPausedAction):
     def __init__(self, pre: ExcelPrepare):
         super().__init__("excel_calc")
         self.pre = pre
@@ -443,7 +468,7 @@ class ExcelCalc(Action):
             pyautogui.keyUp("command")
 
 
-class PPTPlay(Action):
+class PPTPlay(AutomaticallyPausedAction):
     def __init__(self):
         super().__init__("ppt_play")
 
@@ -476,7 +501,7 @@ class PPTPrepare(Batch):
         return Call("bump_slide_counter", bump)
 
 
-class PPTNext(Action):
+class PPTNext(AutomaticallyPausedAction):
     def __init__(self, context: PPTPrepare):
         super().__init__("ppt_next")
         self.context = context
@@ -491,7 +516,7 @@ class PPTNext(Action):
             pyautogui.press("enter")
 
 
-class WordTypeNonsense(Action):
+class WordTypeNonsense(AutomaticallyPausedAction):
     def __init__(self):
         super().__init__("word_typewrite")
 
@@ -500,3 +525,51 @@ class WordTypeNonsense(Action):
         time.sleep(0.5)
         pyautogui.write(time.strftime("%Y-%m-%d %H:%M:%S"))
         pyautogui.press("enter")
+
+
+class OpenNewTab(AutomaticallyPausedAction):
+    def __init__(self):
+        super().__init__("open_new_tab")
+
+    def execute(self):
+        if IS_WINDOWS:
+            dec = "ctrl"
+        else:
+            dec = "command"
+        pyautogui.keyDown(dec)
+        pyautogui.press("t")
+        pyautogui.keyUp(dec)
+
+
+class BrowsePage(TimerLoop):
+    def __init__(self, timeout: float):
+        def scroll():
+            if IS_WINDOWS:
+                amount = 15
+            else:
+                amount = -15
+            pyautogui.scroll(amount)
+
+        actions = [
+            Call("scroll", scroll),
+            Pause(1)
+        ]
+        super().__init__(actions, timeout)
+
+
+class OpenAndBrowse(Batch):
+    def __init__(self, url: str, timeout: float):
+        self.url = url
+
+        def copy_url():
+            pyperclip.copy(url)
+
+        actions = [
+            OpenNewTab(),
+            Call("copy_url", copy_url),
+            Paste(),
+            HitEnterKey(),
+            WaitUntilCPUFree(strict=True),
+            BrowsePage(timeout)
+        ]
+        super().__init__("browse_web", actions)
