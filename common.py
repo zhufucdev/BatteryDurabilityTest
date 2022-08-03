@@ -544,11 +544,12 @@ class OpenNewTab(AutomaticallyPausedAction):
 class BrowsePage(TimerLoop):
     def __init__(self, timeout: float):
         def scroll():
+            width, height = pyautogui.size()
             if IS_WINDOWS:
                 amount = 15
             else:
                 amount = -15
-            pyautogui.scroll(amount)
+            pyautogui.scroll(amount, width / 2, height / 2)
 
         actions = [
             Call("scroll", scroll),
