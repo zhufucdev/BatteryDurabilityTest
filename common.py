@@ -205,6 +205,11 @@ class HitEnterKey(HitKey):
         super().__init__("enter")
 
 
+class HitEscapeKey(HitKey):
+    def __init__(self):
+        super().__init__("esc")
+
+
 class OpenApp(AutomaticallyPausedAction):
     def __init__(self, app_name: str, interval: Optional[int] = 0.1):
         super().__init__("open_app")
@@ -333,6 +338,7 @@ class QQLogin(Batch):
         actions = [
             LaunchQQ(),
             WaitUntilCPUFree(),
+            Pause(0.5),
             HitEnterKey(),
             Pause(2),
             WaitUntilCPUFree(),
@@ -369,7 +375,6 @@ class MSOpenRecentDoc(Batch):
         else:
             actions = [
                 HitKey("tab"),
-                Pause(1),
                 HitEnterKey()
             ]
         super().__init__("ms_select_first_doc", actions)
@@ -405,3 +410,62 @@ class ExcelCalc(Action):
     def execute(self):
         cells = ",".join([col + str(self.pre.current_row) for col in ['I', 'O', 'U', 'AA', 'AM', 'AS', 'AY', 'BE']])
         pyautogui.write(f"=SUM({cells})")
+
+
+class PPTPlay(Action):
+    def __init__(self):
+        super().__init__("ppt_play")
+
+    def execute(self):
+        if IS_WINDOWS:
+            pyautogui.press("f5")
+        else:
+            pyautogui.keyDown("command")
+            pyautogui.keyDown("shift")
+            pyautogui.press("enter")
+            pyautogui.keyUp("command")
+            pyautogui.keyUp("shift")
+
+
+class PPTPrepare(Batch):
+    def __init__(self):
+        actions = [
+            MSOpenRecentDoc(),
+            WaitUntilCPUFree(),
+            Pause(1),
+            PPTPlay()
+        ]
+        self.current_slide = 1
+        super().__init__("ppt_prepare", actions)
+
+    def next_slide(self):
+        def bump():
+            self.current_slide += 1
+
+        return Call("bump_slide_counter", bump)
+
+
+class PPTNext(Action):
+    def __init__(self, context: PPTPrepare):
+        super().__init__("ppt_next")
+        self.context = context
+
+    def execute(self):
+        time.sleep(5)
+        if self.context.current_slide >= 3:  # Sample PPT's actual click count
+            pyautogui.press("esc")
+            self.context.current_slide = 1
+            PPTPlay().execute()
+        else:
+            pyautogui.press("enter")
+
+
+class WordTypeNonsense(Action):
+    def __init__(self):
+        super().__init__("word_typewrite")
+
+    def execute(self):
+        pyautogui.write("Microsoft Word the best IDE on this plannet!")
+        time.sleep(0.5)
+        pyautogui.write(time.strftime("%Y-%m-%d %H:%M:%S"))
+        pyautogui.press("enter")
