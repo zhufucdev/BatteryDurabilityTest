@@ -546,9 +546,9 @@ class BrowsePage(TimerLoop):
         def scroll():
             width, height = pyautogui.size()
             if IS_WINDOWS:
-                amount = 15
+                amount = 10
             else:
-                amount = -15
+                amount = -10
             pyautogui.scroll(amount, width / 2, height / 2)
 
         actions = [
