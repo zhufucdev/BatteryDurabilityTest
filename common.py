@@ -270,7 +270,8 @@ class MSLaunch(OpenApp):
             # sometimes Windows has task schedule problem
             WaitUntilCPUFree(strict=True).execute()
             time.sleep(0.5)
-            win = pyautogui.getWindowsWithTitle(self.ms_name.title())
+            win = filter(lambda x: x.title.endswith(self.ms_name.title()), pyautogui.getAllWindows())
+
             if len(win) < 1:
                 raise pyautogui.FailSafeException(f"Failed to activate {self.ms_name.title()}.")
             win[0].activate()
@@ -546,7 +547,7 @@ class BrowsePage(TimerLoop):
         def scroll():
             width, height = pyautogui.size()
             if IS_WINDOWS:
-                amount = 10
+                amount = -100
             else:
                 amount = -10
             pyautogui.scroll(amount, width / 2, height / 2)
