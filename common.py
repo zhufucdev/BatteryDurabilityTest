@@ -53,7 +53,7 @@ class Test:
                 action.execute()
             except pyautogui.FailSafeException as e:
                 logging.debug(f"Test cancelled. Cause: {e}")
-                sys.exit(1)
+                return
             except Exception as e:
                 logging.warning(f"Error while carrying out {self}: {e}")
 
@@ -113,6 +113,7 @@ class TimerLoop(Loop):
                 raise pyautogui.FailSafeException()
 
             if t.is_alive():
+                t.join()
                 return False
             return True
 
@@ -147,7 +148,7 @@ class Batch(AutomaticallyPausedAction):
 class WaitUntilCPUFree(Action):
     def __init__(self, strict: Optional[bool] = False):
         super().__init__("wait_for_free")
-        self.threshold = 35 - 13 * math.log(psutil.cpu_count(True), math.e * 2)
+        self.threshold = 30 - 13 * math.log(psutil.cpu_count(True), math.e * 2)
         if strict:
             self.threshold *= 0.8
         self.timeout = 10
@@ -270,7 +271,8 @@ class MSLaunch(OpenApp):
             # sometimes Windows has task schedule problem
             WaitUntilCPUFree(strict=True).execute()
             time.sleep(0.5)
-            win = filter(lambda x: x.title.endswith(self.ms_name.title()), pyautogui.getAllWindows())
+
+            win = list(filter(lambda x: x.title.lower().endswith(self.ms_name), pyautogui.getAllWindows()))
 
             if len(win) < 1:
                 raise pyautogui.FailSafeException(f"Failed to activate {self.ms_name.title()}.")
@@ -295,7 +297,7 @@ class LaunchPPT(MSLaunch):
 class LaunchBrowser(MSLaunch):
     def __init__(self):
         if IS_WINDOWS:
-            super().__init__("microsoft edge")
+            super().__init__("edge")
         else:
             super().__init__("safari")
 
@@ -429,22 +431,70 @@ class MSOpenRecentDoc(Batch):
         super().__init__("ms_select_first_doc", actions)
 
 
-class ExcelPrepare(Batch):
+class MSPrepare(Batch):
+    def __init__(self, app_name: str, basic_actions: Sequence[Action]):
+        self.basic_actions = basic_actions
+        self.app_name = app_name
+        super().__init__(f"{app_name}_prepare", basic_actions)
+
+    def opened(self):
+        return False
+
+    def shortcut(self) -> Iterable[Action]:
+        """Actions to be executed after the app being brought to foreground."""
+        return []
+
+    def launcher(self) -> Iterable[Action]:
+        """Actions to launch the app."""
+        return []
+
+    def execute(self):
+        if not self.opened():
+            self.actions = self.basic_actions
+        else:
+            actions = []
+            if IS_WINDOWS:
+                win = list(filter(lambda x: x.title.lower().endswith(self.app_name), pyautogui.getAllWindows()))
+                if len(win) < 1:
+                    self.actions = self.basic_actions
+                else:
+                    win[0].activate()
+            else:
+                actions.extend(self.launcher())
+            actions.extend(self.shortcut())
+            self.actions = actions
+
+        super().execute()
+
+
+class ExcelPrepare(MSPrepare):
     def __init__(self):
         actions = [
+            LaunchExcel(),
+            WaitUntilCPUFree(),
+            Pause(1.3),
             MSOpenRecentDoc(),
             WaitUntilCPUFree(),
             Pause(1),
             MSGoto("BQ3"),
         ]
-        self.current_row = 3
-        super().__init__("excel_prepare", actions)
+        self.current_row = 0
+        super().__init__("excel", actions)
 
     def next_row(self):
         def plus():
             self.current_row += 1
 
         return Call("bump_row_counter", plus)
+
+    def opened(self):
+        return self.current_row > 0
+
+    def shortcut(self):
+        return self.basic_actions[-1:]
+
+    def launcher(self):
+        return self.basic_actions[:1]
 
     def execute(self):
         super().execute()
@@ -457,7 +507,8 @@ class ExcelCalc(AutomaticallyPausedAction):
         self.pre = pre
 
     def execute(self):
-        cells = ",".join([col + str(self.pre.current_row) for col in ['I', 'O', 'U', 'AA', 'AM', 'AS', 'AY', 'BE']])
+        cells = ",".join(
+            [col + str(self.pre.current_row) for col in ['I', 'O', 'U', 'AA', 'AG', 'AM', 'AS', 'AY', 'BE']])
         expr = f"=SUM({cells})"
         if IS_WINDOWS:
             pyautogui.write(expr)
@@ -484,22 +535,35 @@ class PPTPlay(AutomaticallyPausedAction):
             pyautogui.keyUp("shift")
 
 
-class PPTPrepare(Batch):
+class PPTPrepare(MSPrepare):
     def __init__(self):
         actions = [
+            LaunchPPT(),
+            WaitUntilCPUFree(),
+            Pause(1.3),
             MSOpenRecentDoc(),
             WaitUntilCPUFree(),
             Pause(1),
             PPTPlay()
         ]
-        self.current_slide = 1
-        super().__init__("ppt_prepare", actions)
+        self.current_slide = 0
+        super().__init__("powerpoint", actions)
 
     def next_slide(self):
         def bump():
             self.current_slide += 1
 
         return Call("bump_slide_counter", bump)
+
+    def shortcut(self):
+        return self.basic_actions[-1:]
+
+    def launcher(self):
+        return self.basic_actions[:1]
+
+    def execute(self):
+        super().execute()
+        self.current_slide = 1
 
 
 class PPTNext(AutomaticallyPausedAction):
@@ -528,6 +592,28 @@ class WordTypeNonsense(AutomaticallyPausedAction):
         pyautogui.press("enter")
 
 
+class WordPrepare(MSPrepare):
+    def __init__(self):
+        actions = [
+            LaunchWord(),
+            WaitUntilCPUFree(),
+            Pause(2),
+            MSOpenRecentDoc(),
+        ]
+        self._opened = False
+        super().__init__("word", actions)
+
+    def launcher(self):
+        return self.basic_actions[:1]
+
+    def opened(self):
+        return self._opened
+
+    def execute(self):
+        super().execute()
+        self._opened = True
+
+
 class OpenNewTab(AutomaticallyPausedAction):
     def __init__(self):
         super().__init__("open_new_tab")
@@ -547,7 +633,7 @@ class BrowsePage(TimerLoop):
         def scroll():
             width, height = pyautogui.size()
             if IS_WINDOWS:
-                amount = -100
+                amount = -500
             else:
                 amount = -10
             pyautogui.scroll(amount, width / 2, height / 2)

@@ -1,6 +1,6 @@
 from common import *
 
-MS_WORK_DURATION = 30
+MS_WORK_DURATION = 10
 BROWSE_PAGES = ["jd.com", "taobao.com", "sina.com.cn", "163.com", "sohu.com", "ithome.com", "chiphell.com",
                 "bbs.nga.cn", "gamersky.com", "3dmgame.com", "4399.com", "https://www.apple.com.cn/macbook-air-m2/"]
 
@@ -10,7 +10,7 @@ class TestInitialization(Test):
         actions = [
             LaunchNeteaseMusic(),
             Pause(2),
-            WaitUntilCPUFree(),
+            WaitUntilCPUFree(strict=True),
             HitSpaceKey(),
             QQLogin()
         ]
@@ -21,10 +21,8 @@ class StandardTest(Test):
     def __init__(self):
         excel_context = ExcelPrepare()
         ppt_context = PPTPrepare()
+        word_context = WordPrepare()
         actions = [
-            LaunchExcel(),
-            WaitUntilCPUFree(),
-            Pause(1.3),
             excel_context,
             Pause(1),
             TimerLoop(
@@ -38,9 +36,6 @@ class StandardTest(Test):
             Pause(0.5),
             HitEscapeKey(),
 
-            LaunchPPT(),
-            WaitUntilCPUFree(),
-            Pause(1.3),
             ppt_context,
             Pause(1),
             TimerLoop(
@@ -53,15 +48,12 @@ class StandardTest(Test):
             Pause(0.5),
             HitEscapeKey(),
 
-            LaunchWord(),
-            WaitUntilCPUFree(),
-            Pause(1.3),
-            MSOpenRecentDoc(),
+            word_context,
             Pause(1),
             TimerLoop([WordTypeNonsense()], MS_WORK_DURATION),
 
-            Pause(5),
-            LaunchBrowser()
+            # Pause(5),
+            # LaunchBrowser()
         ]
-        [actions.append(OpenAndBrowse(url, 10)) for url in BROWSE_PAGES]
+        # [actions.append(OpenAndBrowse(url, 10)) for url in BROWSE_PAGES]
         super().__init__("standard_test", actions)
