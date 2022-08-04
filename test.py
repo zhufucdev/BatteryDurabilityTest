@@ -6,6 +6,8 @@ TOTAL_BROWSING_TIME = 30
 BROWSE_PAGES = ["jd.com", "taobao.com", "sina.com.cn", "163.com", "sohu.com", ("ithome.com", 20), ("chiphell.com", 10),
                 ("bbs.nga.cn", 10), ("gamersky.com", 15), ("3dmgame.com", 20), ("4399.com", 23),
                 ("https://www.apple.com.cn/macbook-air-m2/", 80)]
+VIDEO_WATCH_TIME = 30
+QQ_CHAT_TIME = 30
 
 
 class TestInitialization(Test):
@@ -66,7 +68,15 @@ class StandardTest(Test):
 
             Pause(1),
             TimerLoop(web_browsing, TOTAL_BROWSING_TIME, should_not_stop_when=['quit']),
-            Quit()
+            OpenAndBrowse("https://www.bilibili.com/video/BV1Af4y1f7NJ", 0),
+            Pause(VIDEO_WATCH_TIME),
+            Quit(),
+
+            WakeQQ(),
+            WaitUntilCPUFree(),
+            BotChat(QQ_CHAT_TIME),
+            Pause(1),
+            CloseWindow()
         ]
 
         super().__init__("standard_test", actions)

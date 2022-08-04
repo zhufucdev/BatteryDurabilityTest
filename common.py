@@ -87,13 +87,17 @@ class Loop(AutomaticallyPausedAction):
 class TimerLoop(Loop):
     """ Symbolize a loop that exits after a certain period of time."""
 
-    def __init__(self, actions: Iterable[Action], timeout: float, should_not_stop_when: Iterable[str] = []):
+    def __init__(self, actions: Iterable[Action], timeout: float, should_not_stop_when: Iterable[str] = None):
         super().__init__(actions)
+        if should_not_stop_when is None:
+            should_not_stop_when = []
         self.timeout = timeout
         self.should_not_stop_when = should_not_stop_when
         self.cancelled = False
 
     def execute(self):
+        if self.timeout <= 0:
+            return
         time_start = time.time()
 
         def take(a: Action, timeout: float):
@@ -286,7 +290,7 @@ class MSLaunch(OpenApp):
             win = list(filter(lambda x: x.title.lower().endswith(self.ms_name), pyautogui.getAllWindows()))
 
             if len(win) < 1:
-                raise pyautogui.FailSafeException(f"Failed to activate {self.ms_name.title()}.")
+                raise RuntimeError(f"Failed to activate {self.ms_name.title()}.")
             win[0].activate()
 
 
@@ -421,6 +425,19 @@ class Quit(AutomaticallyPausedAction):
             pyautogui.press("q")
             pyautogui.keyUp("command")
 
+class CloseWindow(AutomaticallyPausedAction):
+    def __init__(self):
+        super().__init__("close_window")
+
+    def execute(self):
+        if IS_WINDOWS:
+            pyautogui.keyDown("ctrl")
+            pyautogui.press("w")
+            pyautogui.keyUp("ctrl")
+        else:
+            pyautogui.keyDown("command")
+            pyautogui.press("w")
+            pyautogui.keyUp("command")
 
 # Specific Problems
 class QQLogin(Batch):
@@ -728,3 +745,36 @@ class SearchWithBaiduAndBrowse(Batch):
             BrowsePage(timeout)
         ]
         super().__init__("baidu_search", actions)
+
+
+class WakeQQ(AutomaticallyPausedAction):
+    def __init__(self):
+        super().__init__("wake_qq")
+
+    def execute(self):
+        if IS_WINDOWS:
+            win = pyautogui.getWindowsWithTitle('QQ')
+            if len(win) < 1:
+                raise RuntimeError("Failed to activate QQ.")
+            win[0].activate()
+        else:
+            LaunchQQ().execute()
+
+
+class BotChat(Batch):
+    def __init__(self, timeout: float):
+        loop = TimerLoop([WordTypeNonsense()], timeout)
+        if IS_WINDOWS:
+            actions = [
+                Type("Bot Testing"),
+                HitEnterKey(),
+                Pause(2),
+                loop
+            ]
+        else:
+            actions = [
+                HitKey("b"),
+                Pause(1),
+                loop
+            ]
+        super().__init__("qq_bot_chat", actions)

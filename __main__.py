@@ -6,5 +6,5 @@ logging.basicConfig(format='%(asctime)s %(message)s', datefmt='%c', level=loggin
 if __name__ == "__main__":
     TestInitialization().carry()
     standard_test = StandardTest()
-
-    standard_test.carry()
+    while True:
+        standard_test.carry()
