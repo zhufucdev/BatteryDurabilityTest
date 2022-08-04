@@ -87,9 +87,10 @@ class Loop(AutomaticallyPausedAction):
 class TimerLoop(Loop):
     """ Symbolize a loop that exits after a certain period of time."""
 
-    def __init__(self, actions: Iterable[Action], timeout: float):
+    def __init__(self, actions: Iterable[Action], timeout: float, should_not_stop_when: Iterable[str] = []):
         super().__init__(actions)
         self.timeout = timeout
+        self.should_not_stop_when = should_not_stop_when
         self.cancelled = False
 
     def execute(self):
@@ -114,7 +115,8 @@ class TimerLoop(Loop):
 
             if t.is_alive():
                 t.join()
-                return False
+                if a.name not in self.should_not_stop_when:
+                    return False
             return True
 
         while True:
@@ -148,24 +150,31 @@ class Batch(AutomaticallyPausedAction):
 class WaitUntilCPUFree(Action):
     def __init__(self, strict: Optional[bool] = False):
         super().__init__("wait_for_free")
-        self.threshold = 30 - 13 * math.log(psutil.cpu_count(True), math.e * 2)
-        if strict:
-            self.threshold *= 0.8
+        self.strict = strict
         self.timeout = 10
-
-        if self.threshold < 8:
-            self.threshold = 8
 
     def execute(self):
         count = 0
-        while psutil.cpu_percent() > self.threshold:
+        last = psutil.cpu_percent()
+        initial = last
+        declined = False
+        if self.strict:
+            hold = 0.1
+            drop = 13
+        else:
+            hold = 0.05
+            drop = 10
+        while True:
             time.sleep(0.5)
+            current = psutil.cpu_percent()
+            if not declined and current < last:
+                declined = True
+            elif (declined and (initial - last >= drop or current - last <= hold)) or current < 8:
+                break
             count += 1
             if count > self.timeout * 2:
                 raise TimeoutError(f"CPU usage always high at {psutil.cpu_percent()}%")
-
-    def __str__(self):
-        return f"{self.name}(threshold={self.threshold}%)"
+            last = current
 
 
 class Call(Action):
@@ -240,6 +249,8 @@ class OpenApp(AutomaticallyPausedAction):
     def execute(self):
         HitSearchKey().execute()
         pyautogui.write(self.app_name, self.interval)
+        if IS_WINDOWS:
+            time.sleep(1)
         pyautogui.press("enter")
 
     def __str__(self):
@@ -678,7 +689,7 @@ class BrowsePage(TimerLoop):
         def scroll():
             width, height = pyautogui.size()
             if IS_WINDOWS:
-                amount = -500
+                amount = -400
             else:
                 amount = -10
             pyautogui.scroll(amount, width / 2, height / 2)
@@ -698,7 +709,11 @@ class OpenAndBrowse(Batch):
             WaitUntilCPUFree(strict=True),
             BrowsePage(timeout)
         ]
+        self.url = url
         super().__init__("browse_web", actions)
+
+    def __str__(self):
+        return f"open_browse({self.url})"
 
 
 class SearchWithBaiduAndBrowse(Batch):
