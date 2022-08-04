@@ -302,14 +302,6 @@ class LaunchBrowser(MSLaunch):
             super().__init__("safari")
 
 
-class Click(AutomaticallyPausedAction):
-    def __init__(self):
-        super().__init__("click")
-
-    def execute(self):
-        pyautogui.click()
-
-
 # Utility
 class MoveCursorRelateToWindow(AutomaticallyPausedAction):
     def __init__(self, x: float, y: float, origin: str):
@@ -336,6 +328,14 @@ class MoveCursorRelateToWindow(AutomaticallyPausedAction):
             x = window.right + self.x
 
         pyautogui.moveTo(x, y)
+
+
+class Click(AutomaticallyPausedAction):
+    def __init__(self):
+        super().__init__("click")
+
+    def execute(self):
+        pyautogui.click()
 
 
 class ClickPos(AutomaticallyPausedAction):
@@ -381,6 +381,34 @@ class ClickCentral(ClickPos):
     def __init__(self):
         width, height = pyautogui.size()
         super().__init__((width / 2, height / 9))
+
+
+class Type(AutomaticallyPausedAction):
+    def __init__(self, content: str, interval: Optional[float] = 0.0):
+        self.content = content
+        self.interval = interval
+        super().__init__("type")
+
+    def execute(self):
+        pyautogui.write(self.content, self.interval)
+
+    def __str__(self):
+        return f"type(content={self.content}, interval={self.interval})"
+
+
+class Quit(AutomaticallyPausedAction):
+    def __init__(self):
+        super().__init__("quit")
+
+    def execute(self):
+        if IS_WINDOWS:
+            pyautogui.keyDown("alt")
+            pyautogui.press("f4")
+            pyautogui.keyUp("alt")
+        else:
+            pyautogui.keyDown("command")
+            pyautogui.press("q")
+            pyautogui.keyUp("command")
 
 
 # Specific Problems
@@ -628,6 +656,23 @@ class OpenNewTab(AutomaticallyPausedAction):
         pyautogui.keyUp(dec)
 
 
+class OpenUrl(Batch):
+    def __init__(self, url: str):
+        def copy_url():
+            pyperclip.copy(url)
+
+        actions = [
+            Call("copy_url", copy_url),
+            Paste(),
+            HitEnterKey(),
+        ]
+        super().__init__("open_url", actions)
+        self.url = url
+
+    def __str__(self):
+        return f"open_url({self.url})"
+
+
 class BrowsePage(TimerLoop):
     def __init__(self, timeout: float):
         def scroll():
@@ -647,17 +692,24 @@ class BrowsePage(TimerLoop):
 
 class OpenAndBrowse(Batch):
     def __init__(self, url: str, timeout: float):
-        self.url = url
-
-        def copy_url():
-            pyperclip.copy(url)
-
         actions = [
             OpenNewTab(),
-            Call("copy_url", copy_url),
-            Paste(),
-            HitEnterKey(),
+            OpenUrl(url),
             WaitUntilCPUFree(strict=True),
             BrowsePage(timeout)
         ]
         super().__init__("browse_web", actions)
+
+
+class SearchWithBaiduAndBrowse(Batch):
+    def __init__(self, keywords: str, timeout: float):
+        actions = [
+            OpenNewTab(),
+            OpenUrl("https://baidu.com"),
+            WaitUntilCPUFree(strict=True),
+            Type(keywords),
+            HitEnterKey(),
+            WaitUntilCPUFree(strict=True),
+            BrowsePage(timeout)
+        ]
+        super().__init__("baidu_search", actions)
