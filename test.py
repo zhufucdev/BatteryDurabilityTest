@@ -36,6 +36,7 @@ class StandardTest(Test):
                 web_browsing.append(OpenAndBrowse(page, DEFAULT_BROWSING_TIME))
         web_browsing.append(SearchWithBaiduAndBrowse("Geekerwan", 20))
         web_browsing.append(Quit())
+        web_browsing.append(Pause(1))
         actions = [
             excel_context,
             Pause(1),
@@ -69,7 +70,7 @@ class StandardTest(Test):
             TimerLoop("word_typewrite", [WordTypeNonsense()], MS_WORK_DURATION),
 
             Pause(1),
-            TimerLoop("web_switch_page", web_browsing, TOTAL_BROWSING_TIME, should_not_stop_when=['quit']),
+            TimerLoop("web_switch_page", web_browsing, TOTAL_BROWSING_TIME, should_not_stop_when=['quit', 'pause']),
             OpenAndBrowse("https://www.bilibili.com/video/BV1Af4y1f7NJ", 0),
             Pause(VIDEO_WATCH_TIME),
             Quit(),
