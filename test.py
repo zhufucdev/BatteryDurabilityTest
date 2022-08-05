@@ -52,29 +52,29 @@ class StandardTest(Test):
             ),
             Pause(0.5),
             HitEscapeKey(),
-
-            ppt_context,
-            Pause(1),
-            TimerLoop(
-                "ppt_slideshow",
-                [
-                    PPTNext(ppt_context),
-                    ppt_context.next_slide()
-                ],
-                MS_WORK_DURATION
-            ),
-            Pause(0.5),
-            HitEscapeKey(),
-
-            word_context,
-            Pause(1),
-            TimerLoop("word_typewrite", [WordTypeNonsense()], MS_WORK_DURATION),
-
-            Pause(1),
-            TimerLoop("web_switch_page", web_browsing, TOTAL_BROWSING_TIME, should_not_stop_when=['quit', 'pause']),
-            OpenAndBrowse("https://www.bilibili.com/video/BV1Af4y1f7NJ", 0),
-            Pause(VIDEO_WATCH_TIME),
-            Quit(),
+            #
+            # ppt_context,
+            # Pause(1),
+            # TimerLoop(
+            #     "ppt_slideshow",
+            #     [
+            #         PPTNext(ppt_context),
+            #         ppt_context.next_slide()
+            #     ],
+            #     MS_WORK_DURATION
+            # ),
+            # Pause(0.5),
+            # HitEscapeKey(),
+            #
+            # word_context,
+            # Pause(1),
+            # TimerLoop("word_typewrite", [WordTypeNonsense()], MS_WORK_DURATION),
+            #
+            # Pause(1),
+            # TimerLoop("web_switch_page", web_browsing, TOTAL_BROWSING_TIME, should_not_stop_when=['quit', 'pause']),
+            # OpenAndBrowse("https://www.bilibili.com/video/BV1Af4y1f7NJ", 0),
+            # Pause(VIDEO_WATCH_TIME),
+            # Quit(),
 
             WakeQQ(),
             WaitUntilCPUFree(),

@@ -773,6 +773,8 @@ class BotChat(Batch):
         if IS_WINDOWS:
             actions = [
                 Type("Bot Testing"),
+                WaitUntilCPUFree(),
+                Pause(1),
                 HitEnterKey(),
                 Pause(2),
                 loop
