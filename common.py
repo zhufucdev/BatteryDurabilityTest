@@ -1,7 +1,6 @@
 from typing import Sequence, Optional, Iterable, Callable
 import logging
 import sys
-import math
 import pyautogui
 import pyperclip
 import psutil
@@ -41,11 +40,13 @@ class Test:
     def __init__(self, name: str, actions: Iterable[Action]):
         self.name = name
         self.actions = actions
+        self.current_action = None
 
     def carry(self):
         logging.debug(f"------{self}------")
         for action in self.actions:
             try:
+                self.current_action = action
                 if action is not AutomaticallyPausedAction:
                     Pause(pyautogui.PAUSE).execute()
 
@@ -53,9 +54,10 @@ class Test:
                 action.execute()
             except pyautogui.FailSafeException as e:
                 logging.debug(f"Test cancelled. Cause: {e}")
-                return
+                return False
             except Exception as e:
                 logging.warning(f"Error while carrying out {self}: {e}")
+        return True
 
     def __str__(self):
         return self.name
@@ -87,10 +89,12 @@ class Loop(AutomaticallyPausedAction):
 class TimerLoop(Loop):
     """ Symbolize a loop that exits after a certain period of time."""
 
-    def __init__(self, actions: Iterable[Action], timeout: float, should_not_stop_when: Iterable[str] = None):
+    def __init__(self, name: str, actions: Iterable[Action], timeout: float,
+                 should_not_stop_when: Iterable[str] = None):
         super().__init__(actions)
         if should_not_stop_when is None:
             should_not_stop_when = []
+        self.name = name
         self.timeout = timeout
         self.should_not_stop_when = should_not_stop_when
         self.cancelled = False
@@ -129,7 +133,7 @@ class TimerLoop(Loop):
                     return
 
     def __str__(self):
-        return f"loop(timeout={self.timeout})"
+        return f"loop(name={self.name}, timeout={self.timeout})"
 
 
 class Batch(AutomaticallyPausedAction):
@@ -425,6 +429,7 @@ class Quit(AutomaticallyPausedAction):
             pyautogui.press("q")
             pyautogui.keyUp("command")
 
+
 class CloseWindow(AutomaticallyPausedAction):
     def __init__(self):
         super().__init__("close_window")
@@ -438,6 +443,7 @@ class CloseWindow(AutomaticallyPausedAction):
             pyautogui.keyDown("command")
             pyautogui.press("w")
             pyautogui.keyUp("command")
+
 
 # Specific Problems
 class QQLogin(Batch):
@@ -715,7 +721,7 @@ class BrowsePage(TimerLoop):
             Call("scroll", scroll),
             Pause(1)
         ]
-        super().__init__(actions, timeout)
+        super().__init__("web_browse", actions, timeout)
 
 
 class OpenAndBrowse(Batch):
@@ -763,7 +769,7 @@ class WakeQQ(AutomaticallyPausedAction):
 
 class BotChat(Batch):
     def __init__(self, timeout: float):
-        loop = TimerLoop([WordTypeNonsense()], timeout)
+        loop = TimerLoop("bot_chat", [WordTypeNonsense()], timeout)
         if IS_WINDOWS:
             actions = [
                 Type("Bot Testing"),
